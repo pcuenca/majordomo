@@ -1,11 +1,11 @@
 # @majordomo slack bot
 
-Simple bot to interact with external services from slack.
+Simple [bot](https://api.slack.com/rtm) to interact with external services from [slack](http://slack.com/).
 
 ## Setup
 
 * Add a bot integration to slack, call it `majordomo`; use the provided token as `SLACK_TOKEN` in `majordomo.js`.
-* Add an incoming webhook integration to slack; use the provided URL as `SLACK_WEBHOOK` in `majordomo.js`.
+* Add an [incoming webhook](https://api.slack.com/incoming-webhooks) integration to slack; use the provided URL as `SLACK_WEBHOOK` in `majordomo.js`.
 * Configure `plugins/index.js`.
 
 ## Install
@@ -42,7 +42,7 @@ Example: say 'morning in #general
 
 ## Plugin: github issues
 
-Send a webhook message with the issue overview every time someone mentions the `#issue_number`.
+Send a webhook message [with the issue overview](https://developer.github.com/v3/issues/#get-a-single-issue) every time someone mentions the issue number prefixed with `#`.
 
 * Setup with a token, owner and repo in `plugins/show_github_issue.js`.
 
