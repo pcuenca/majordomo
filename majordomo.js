@@ -28,7 +28,6 @@ logger.V = false; // true to enable logging
 
 // Slack 
 var slackAPI = require('slackbotapi');
-var slack = new slackAPI(SLACK_TOKEN);
 
 // Slack Incoming Webhooks
 var WebHook = require('slackihook')
@@ -39,61 +38,86 @@ var plugins = require("./plugins/")
 
 var master_user = null;
 
-// Slack on EVENT message, send data.
-slack.on('message', function(data) {
-    logger.debug(data, 'incoming data');
+function connectToSlack() {
+    var slack = new slackAPI(SLACK_TOKEN);
 
-	// If no text, return
-	if (typeof data.text == 'undefined') return;
-    // If from a bot, return
-    if (typeof data.subtype != 'undefined' && data.subtype == 'bot_message') return;
-
-    if (!master_user) {
-        try {
-            if (slack.getIM(MASTER_NICK).user == data.user) {
-                logger.success("Your wish is my command, oh master.");
-                slack.sendMsg(data.channel, 'Your wish is my command, oh master! :raised_hands:');
-                master_user = data.user;
+    var waitingForPong = false;
+    slack.on( 'hello', function() {
+        var intervalTimer = setInterval( function() {
+            if ( waitingForPong ) {
+                logger.warning( 'No PONG response received, reestablishing connection' );
+                clearInterval( intervalTimer );
+                slack.removeAllListeners();
+                connectToSlack();
+            } else {
+                waitingForPong = true;
+                slack.ping();
             }
-        } 
-        catch(ex) {/* pass */}
-    }
+        }, 30000 );
+    });
 
-    var is_master = false;
-    if (master_user == data.user) {
-        is_master = true;
-    }
+    /* Requires pong to be added to slackAPI.events in slackbotapi */
+    slack.on( 'pong', function(data) {
+        waitingForPong = false;
+        logger.info( 'pong', data );
+    });
 
-    var match;
-    for(var plugin_name in plugins) {
-        var plugin = plugins[plugin_name];
-        if (plugin.master_only && !is_master) {
-            continue; // for the master only
+    // Slack on EVENT message, send data.
+    slack.on('message', function(data) {
+        logger.debug(data, 'incoming data');
+
+    	// If no text, return
+    	if (typeof data.text == 'undefined') return;
+        // If from a bot, return
+        if (typeof data.subtype != 'undefined' && data.subtype == 'bot_message') return;
+
+        if (!master_user) {
+            try {
+                if (slack.getIM(MASTER_NICK).user == data.user) {
+                    logger.success("Your wish is my command, oh master.");
+                    slack.sendMsg(data.channel, 'Your wish is my command, oh master! :raised_hands:');
+                    master_user = data.user;
+                }
+            } 
+            catch(ex) {/* pass */}
         }
-        if (plugin.users) {
-            var access_granted = false;
-            for(var u = 0; u < plugin.users.length; u++) {
-                var nick = plugin.users[u];
-                logger.debug(nick, 'nick');
-                try {
-                    if (slack.getIM(nick).user == data.user) {
-                        logger.success('Access granted to ' + nick);
-                        access_granted = true;
-                        break;
-                    }
-                } 
-                catch(ex) {/* pass */}
+
+        var is_master = false;
+        if (master_user == data.user) {
+            is_master = true;
+        }
+
+        var match;
+        for(var plugin_name in plugins) {
+            var plugin = plugins[plugin_name];
+            if (plugin.master_only && !is_master) {
+                continue; // for the master only
             }
-            if (! access_granted) {
-                continue; // for some users only
+            if (plugin.users) {
+                var access_granted = false;
+                for(var u = 0; u < plugin.users.length; u++) {
+                    var nick = plugin.users[u];
+                    logger.debug(nick, 'nick');
+                    try {
+                        if (slack.getIM(nick).user == data.user) {
+                            logger.success('Access granted to ' + nick);
+                            access_granted = true;
+                            break;
+                        }
+                    } 
+                    catch(ex) {/* pass */}
+                }
+                if (! access_granted) {
+                    continue; // for some users only
+                }
+            }
+            if ((match = data.text.match(plugin.pattern))) {
+                logger.info('Plugin: ' + plugin_name);
+                require('./plugins/' + plugin_name)(match[1], data, slack, inc_hook);
+                break; // first matching plugin wins
             }
         }
-        if ((match = data.text.match(plugin.pattern))) {
-            logger.info('Plugin: ' + plugin_name);
-            require('./plugins/' + plugin_name)(match[1], data, slack, inc_hook);
-            break; // first matching plugin wins
-        }
-    }
-});
+    });    
+}
 
-
+connectToSlack();
