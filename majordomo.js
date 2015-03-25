@@ -41,12 +41,13 @@ var master_user = null;
 function connectToSlack() {
     var slack = new slackAPI(SLACK_TOKEN);
 
+    var pongTimer = null;
     var waitingForPong = false;
     slack.on( 'hello', function() {
-        var intervalTimer = setInterval( function() {
+        pongTimer = setInterval( function() {
             if ( waitingForPong ) {
                 logger.warning( 'No PONG response received, reestablishing connection' );
-                clearInterval( intervalTimer );
+                clearInterval( pongTimer );
                 slack.removeAllListeners();
                 connectToSlack();
             } else {
@@ -56,10 +57,15 @@ function connectToSlack() {
         }, 30000 );
     });
 
-    /* Requires pong to be added to slackAPI.events in slackbotapi */
     slack.on( 'pong', function(data) {
         waitingForPong = false;
-        logger.info( 'pong', data );
+    });
+    
+    slack.on( 'team_migration_started', function(data) {
+        logger.warning( 'team_migration_started - will reconnect in 60 seconds' );
+        clearInterval( pongTimer );
+        slack.removeAllListeners();
+        setTimeout( connectToSlack, 60*1000 ); 
     });
 
     // Slack on EVENT message, send data.
